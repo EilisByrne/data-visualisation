@@ -7,9 +7,9 @@ var ausTeams = ['New South Wales Swifts', 'Adelaide Thunderbirds', 'Melbourne Vi
 
 var margin = {
         top: 30,
-        right: 40,
+        right: 50,
         bottom: 30,
-        left: 40
+        left: 50
     },
     origWidth = 1600,
     origHeight = 700,
@@ -28,8 +28,6 @@ var xAxis = d3.svg.axis().scale(x).orient('bottom');
 var yAxis = d3.svg.axis()
     .scale(y)
     .orient('left')
-    .ticks(15)
-    .tickFormat(d3.format('.2s'));
 
 var svg = d3.select('.container').append('svg')
     .attr('class', 'graph')
@@ -39,11 +37,11 @@ var svg = d3.select('.container').append('svg')
     .attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
 
 svg.append("text")
-        .attr("x", (width / 2))             
-        .attr("y", 0 - (margin.top / 2))
-        .attr("text-anchor", "middle")  
-        .style("font-size", "16px") 
-        .text("");
+    .attr("x", (width / 2))
+    .attr("y", 0 - (margin.top / 2))
+    .attr("text-anchor", "middle")
+    .style("font-size", "18px")
+    .text("");
 
 var data;
 var initialData;
@@ -53,6 +51,7 @@ var maxYear = 2013;
 var minYear = 2008;
 var minRound = 1;
 var maxRound = 17;
+var games = 'all';
 d3.csv('/data/combined.csv', function(error, items) {
     if (error) {
         console.log(error);
@@ -66,17 +65,7 @@ d3.csv('/data/combined.csv', function(error, items) {
         initialData = items;
         data = items;
         View.overview();
-        setupSliders();
-        // d3.select('.year').call(d3.slider().axis(true).min(minYear).max(maxYear).value([minYear, maxYear]).step(1).on("slide", function(evt, value) {
-        //     minYear = value[0];
-        //     maxYear = value[1];
-        //     sliderChange();
-        // }));
-        // d3.select('.round').call(d3.slider().axis(true).min(minRound).max(maxRound).value([minRound, minRound]).step(1).on("slide", function(evt, value) {
-        //     minRound = value[0];
-        //     maxRound = value[1];
-        //     sliderChange();
-        // }));
+        setupInterface();
     }
 });
 
@@ -99,31 +88,71 @@ function initializeTeams() {
 
 var View = {};
 
-View.overview = function(transition) {
+View.overview = function() {
     currentView = View.overview;
     cleanUp();
+    filterData();
     color.domain(['HomeWins', 'AwayWins', 'AwayLosses', 'HomeLosses']);
     var teams = getOverviewTeams();
 
-    _.each(teams, function(team) {
-        team.wins = [{
-            y: team.wins[0] + team.wins[1],
-            height: team.wins[1],
-            name: 'HomeWins'
-        }, {
-            y: team.wins[1],
-            height: 0,
-            name: 'AwayWins'
-        }];
-        team.losses = [{
-            y: -(team.losses[0] + team.losses[1]),
-            height: -team.losses[1],
-            name: 'HomeLosses'
-        }, {
-            y: -team.losses[1],
-            height: 0,
-            name: 'AwayLosses'
-        }];
+    teams = teams.filter(function(item) {
+        return ((item.wins[0] + item.wins[1]) || (item.losses[0] + item.losses[1])) ;
+    });
+
+    switch (games) {
+        case 'all':
+            _.each(teams, function(team) {
+                team.wins = [{
+                    y: team.wins[0] + team.wins[1],
+                    height: team.wins[1],
+                    name: 'HomeWins'
+                }, {
+                    y: team.wins[1],
+                    height: 0,
+                    name: 'AwayWins'
+                }];
+                team.losses = [{
+                    y: -(team.losses[0] + team.losses[1]),
+                    height: -team.losses[1],
+                    name: 'HomeLosses'
+                }, {
+                    y: -team.losses[1],
+                    height: 0,
+                    name: 'AwayLosses'
+                }];
+            });
+            break;
+        case 'home':
+            _.each(teams, function(team) {
+                team.wins = [{
+                    y: team.wins[0],
+                    height: 0,
+                    name: 'HomeWins'
+                }]
+                team.losses = [{
+                    y: -team.losses[0],
+                    height: 0,
+                    name: 'HomeLosses'
+                }];
+            });
+            break;
+        case 'away':
+            _.each(teams, function(team) {
+                team.wins = [{
+                    y: team.wins[1],
+                    height: 0,
+                    name: 'AwayWins'
+                }];
+                team.losses = [{
+                    y: -team.losses[1],
+                    height: 0,
+                    name: 'AwayLosses'
+                }];
+            });
+            break;
+    }
+    teams = _.sortBy(teams, function(team) {
+        return -(team.wins[0].y);
     });
 
     x.domain(teams.map(function(team) {
@@ -136,14 +165,10 @@ View.overview = function(transition) {
 
     y.domain([-range, range]);
 
-    if (transition) {
-        // transitionGraph(teams, 'wins');
-        // transitionGraph(teams, 'losses');
-    } else {
-        createGraph('Wins / Losses');
-        renderGraph(teams, 'wins');
-        renderGraph(teams, 'losses');
-    }
+    createGraph('Wins / Losses');
+    renderMultiGraph(teams, 'wins');
+    renderMultiGraph(teams, 'losses');
+
 
     svg.select('text').text("Wins and Losses for each team");
 };
@@ -159,31 +184,64 @@ View.team = function(team) {
     color.domain(['HomeWins', 'AwayWins', 'AwayLosses', 'HomeLosses']);
     var teams = getOverviewTeams();
     teams = teams.filter(function(item) {
-        return item.name !== team;
+        return item.name !== team && ((item.wins[0] + item.wins[1]) || (item.losses[0] + item.losses[1])) ;
     });
 
-    _.each(teams, function(item) {
-        var wins = item.wins;
-        item.wins = [{
-            y: item.losses[1] + item.losses[0],
-            height: item.losses[0],
-            name: 'HomeWins'
-        }, {
-            y: item.losses[0],
-            height: 0,
-            name: 'AwayWins'
-        }];
-        item.losses = [{
-            y: -(wins[1] + wins[0]),
-            height: -wins[0],
-            name: 'HomeLosses'
-        }, {
-            y: -wins[0],
-            height: 0,
-            name: 'AwayLosses'
-        }];
-    });
-
+    switch (games) {
+        case 'all':
+            _.each(teams, function(item) {
+                var wins = item.wins;
+                item.wins = [{
+                    y: item.losses[1] + item.losses[0],
+                    height: item.losses[0],
+                    name: 'HomeWins'
+                }, {
+                    y: item.losses[0],
+                    height: 0,
+                    name: 'AwayWins'
+                }];
+                item.losses = [{
+                    y: -(wins[1] + wins[0]),
+                    height: -wins[0],
+                    name: 'HomeLosses'
+                }, {
+                    y: -wins[0],
+                    height: 0,
+                    name: 'AwayLosses'
+                }];
+            });
+            break;
+        case 'home':
+            _.each(teams, function(item) {
+                var wins = item.wins;
+                item.wins = [{
+                    y: item.losses[1],
+                    height: 0,
+                    name: 'HomeWins'
+                }];
+                item.losses = [{
+                    y: -wins[1],
+                    height: 0,
+                    name: 'HomeLosses'
+                }];
+            });
+            break;
+        case 'away':
+            _.each(teams, function(item) {
+                var wins = item.wins;
+                item.wins = [{
+                    y: item.losses[0],
+                    height: 0,
+                    name: 'AwayWins'
+                }];
+                item.losses = [{
+                    y: -wins[0],
+                    height: 0,
+                    name: 'AwayLosses'
+                }];
+            });
+            break;
+    }
     teams = _.sortBy(teams, function(team) {
         return -(team.wins[0].y);
     });
@@ -199,10 +257,11 @@ View.team = function(team) {
     y.domain([-range, range]);
 
     createGraph('Wins / Losses of ' + team);
-    renderGraph(teams, 'wins');
-    renderGraph(teams, 'losses');
+    renderMultiGraph(teams, 'wins');
+    renderMultiGraph(teams, 'losses');
 
-    svg.select('text').text("Wins and Losses of "+ team + " against each team");
+    svg.select('text').text("Wins and Losses of " + team + " against each team");
+
 };
 
 View.country = function(country) {
@@ -212,14 +271,42 @@ View.country = function(country) {
 };
 
 View.venues = function() {
-
     currentView = View.venues;
+    cleanUp();
+    filterData();
+    var venues = initializeVenues();
+
+    venues = _.sortBy(venues, function(venue) {
+        return -venue.HomeWins;
+    });
+
+    x.domain(venues.map(function(item) {
+        return item.name;
+    }));
+
+    var range = d3.max(venues, function(item) {
+        return Math.max(item.HomeWins, Math.abs(item.HomeLosses));
+    });
+    venues = _.sortBy(venues, 'name');
+    console.log(venues);
+    venues.forEach(function(item) {
+        console.log(item.name, item.HomeWins - item.HomeLosses);
+    })
+    y.domain([-range, range]);
+
+    createGraph('Wins / Losses', true);
+    renderGraph(venues, 'HomeWins');
+    renderGraph(venues, 'HomeLosses');
+
+    svg.select('text').text("Wins and Losses of the home team at each venue");
+
 };
 
 View.venue = function(venue) {
 
     currentView = View.venue;
     viewArg = venue;
+
 };
 
 function getOverviewTeams() {
@@ -246,17 +333,50 @@ function getOverviewTeams() {
         }
     });
 
-    teams = _.sortBy(teams, function(team) {
-        return -(team.wins[0].y);
-    });
     return teams;
 }
 
-function createGraph(label) {
+function initializeVenues() {
+    var venues = [];
+    data.forEach(function(item) {
+        var venue = _.findWhere(venues, {
+            name: item.Venue
+        });
+        if (!venue) {
+            venue = {
+                name: item.Venue,
+                HomeWins: 0,
+                HomeLosses: 0
+            };
+            venues.push(venue);
+        }
+        if (item.AwayScore > item.HomeScore) {
+            venue.HomeLosses--
+        } else {
+            venue.HomeWins++
+        }
+    });
+    return venues;
+}
+
+function createGraph(label, vertAxis) {
+    if (vertAxis) {
+        height = origHeight - 150;
+        svg.attr('height', height + margin.top + margin.bottom)
+    }
     svg.append('g')
         .attr('class', 'x axis')
         .attr('transform', 'translate(0,' + height + ')')
-        .call(xAxis);
+        .call(xAxis)
+    if (vertAxis) {
+        svg.selectAll("text")
+            .style("text-anchor", "end")
+            .attr("dx", "-.8em")
+            .attr("dy", ".15em")
+            .attr("transform", function(d) {
+                return "rotate(-45)"
+            });
+    }
     svg.append('g')
         .attr('class', 'y axis')
         .call(yAxis)
@@ -266,12 +386,16 @@ function createGraph(label) {
         .style('text-anchor', 'end')
         .text(label);
 
+    if (vertAxis) {
+        height = origHeight;
+        svg.attr('height', height + margin.top + margin.bottom)
+    }
     var legend = svg.selectAll(".legend")
         .data(color.domain().slice())
         .enter().append("g")
         .attr("class", "legend")
         .attr("transform", function(d, i) {
-            return "translate(40," + i * 20 + ")";
+            return "translate(50," + i * 20 + ")";
         });
 
     legend.append("rect")
@@ -290,7 +414,7 @@ function createGraph(label) {
         });
 }
 
-function renderGraph(items, selector) {
+function renderMultiGraph(items, selector) {
     var itemObj = svg.selectAll('.name')
         .data(items)
         .enter().append('g')
@@ -329,6 +453,67 @@ function renderGraph(items, selector) {
     //   .attr("id", team)
     //   .on("click", function(d) { drawForOneTeam(this.id); });
     // });
+}
+
+function renderMultiGraph(items, selector) {
+    var itemObj = svg.selectAll('.name')
+        .data(items)
+        .enter().append('g')
+        .attr('class', 'g')
+        .attr('transform', function(item) {
+            return 'translate(' + x(item.name) + ',0)';
+        });
+
+    itemObj.on('click', function(item) {
+        View.team(item.name);
+    });
+
+    itemObj.selectAll('rect')
+        .data(function(item) {
+            return item[selector];
+        })
+        .enter().append('rect')
+        .attr('width', x.rangeBand())
+        .attr('y', function(d) {
+            return y(Math.max(d.height, d.y));
+        })
+        .attr('height', function(d) {
+            return y(Math.abs(d.height)) - y(Math.abs(d.y));
+        })
+        .style('fill', function(d) {
+            return color(d.name);
+        });
+}
+
+function renderGraph(items, selector) {
+    var itemObj = svg.selectAll('.name')
+        .data(items)
+        .enter().append('g')
+        .attr('class', 'g')
+        .attr('transform', function(item) {
+            return 'translate(' + x(item.name) + ',0)';
+        });
+
+
+    itemObj.selectAll('rect')
+        .data(function(item) {
+            return item[selector];
+        })
+        .attr('width', x.rangeBand())
+        .attr('y', function(d) {
+            return y(Math.max(d.height, d.y));
+        })
+        .attr('height', function(d) {
+            return y(Math.abs(d.height)) - y(Math.abs(d.y));
+        })
+        .style('fill', function(d) {
+            return color(d.name);
+        });
+
+
+    itemObj.on('click', function(item) {
+        View.team(item.name);
+    });
 }
 
 // function transitionGraph(items, selector) {
@@ -373,19 +558,32 @@ function cleanUp() {
 
 // })
 
-function setupSliders() {
+function setupInterface() {
 
     d3.select('.year').call(d3.slider().axis(true).min(minYear).max(maxYear).value([minYear, maxYear]).step(1).on("slide", function(evt, value) {
         minYear = value[0];
         maxYear = value[1];
-        sliderChange();
+        currentView(viewArg);
     }));
     d3.select('.round').call(d3.slider().axis(true).min(minRound).max(maxRound).value([minRound, maxRound]).step(1).on("slide", function(evt, value) {
         minRound = value[0];
         maxRound = value[1];
-        sliderChange();
+        currentView(viewArg);
     }));
-
+    d3.select('.buttons').append('button').text('Overview').on('click', View.overview);
+    // d3.select('.buttons').append('button').text('Venues').on('click', View.venues);
+    d3.select('.buttons').append('button').text('Show All Games').on('click', function() {
+        games = 'all';
+        currentView(viewArg);
+    });
+    d3.select('.buttons').append('button').text('Show Home Games').on('click', function() {
+        games = 'home'
+        currentView(viewArg);
+    });
+    d3.select('.buttons').append('button').text('Show Away Games').on('click', function() {
+        games = 'away'
+        currentView(viewArg);
+    });
     // $( ".year" ).slider({
     //   range: true,
     //   min: minYear,
@@ -411,16 +609,11 @@ function setupSliders() {
     // });
 }
 
-function sliderChange() {
-    data = initialData.filter(function(item) {
-        return item.Season >= minYear && item.Season <= maxYear && item.Round >= minRound && item.Round <= maxRound;
-    });
-    currentView(viewArg);
-}
-
 function filterData(filterFun) {
     data = initialData.filter(function(item) {
         return item.Season >= minYear && item.Season <= maxYear && item.Round >= minRound && item.Round <= maxRound;
     });
-    data = data.filter(filterFun);
+    if (filterFun) {
+        data = data.filter(filterFun);
+    }
 }

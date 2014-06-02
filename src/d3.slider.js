@@ -132,7 +132,7 @@ d3.slider = function module() {
         if (typeof axis === "boolean") {
 
           axis = d3.svg.axis()
-              .ticks(Math.round(sliderLength / 100))
+              .ticks(Math.round(sliderLength / 110))
               .tickFormat(tickFormat)
               .orient((orientation === "horizontal") ? "bottom" :  "right");
 
