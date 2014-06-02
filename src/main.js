@@ -6,7 +6,7 @@ var ausTeams = ['New South Wales Swifts', 'Adelaide Thunderbirds', 'Melbourne Vi
 
 
 var margin = {
-        top: 20,
+        top: 30,
         right: 40,
         bottom: 30,
         left: 40
@@ -37,6 +37,13 @@ var svg = d3.select('.container').append('svg')
     .attr('height', height + margin.top + margin.bottom)
     .append('g')
     .attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
+
+svg.append("text")
+        .attr("x", (width / 2))             
+        .attr("y", 0 - (margin.top / 2))
+        .attr("text-anchor", "middle")  
+        .style("font-size", "16px") 
+        .text("");
 
 var data;
 var initialData;
@@ -98,6 +105,27 @@ View.overview = function(transition) {
     color.domain(['HomeWins', 'AwayWins', 'AwayLosses', 'HomeLosses']);
     var teams = getOverviewTeams();
 
+    _.each(teams, function(team) {
+        team.wins = [{
+            y: team.wins[0] + team.wins[1],
+            height: team.wins[1],
+            name: 'HomeWins'
+        }, {
+            y: team.wins[1],
+            height: 0,
+            name: 'AwayWins'
+        }];
+        team.losses = [{
+            y: -(team.losses[0] + team.losses[1]),
+            height: -team.losses[1],
+            name: 'HomeLosses'
+        }, {
+            y: -team.losses[1],
+            height: 0,
+            name: 'AwayLosses'
+        }];
+    });
+
     x.domain(teams.map(function(team) {
         return team.name;
     }));
@@ -117,36 +145,64 @@ View.overview = function(transition) {
         renderGraph(teams, 'losses');
     }
 
+    svg.select('text').text("Wins and Losses for each team");
 };
 
 View.team = function(team) {
     currentView = View.team;
     viewArg = team;
     cleanUp();
-    filterData(function(item){
-            return item.HomeTeam === team || item.AwayTeam ===team;
+    filterData(function(item) {
+        return item.HomeTeam === team || item.AwayTeam === team;
     });
 
     color.domain(['HomeWins', 'AwayWins', 'AwayLosses', 'HomeLosses']);
     var teams = getOverviewTeams();
-    teams = teams.filter(function(item){
-        console.log(item.name === team);
-            return item.name !== team;
+    teams = teams.filter(function(item) {
+        return item.name !== team;
     });
-    x.domain(teams.map(function(team) {
-        return team.name;
+
+    _.each(teams, function(item) {
+        var wins = item.wins;
+        item.wins = [{
+            y: item.losses[1] + item.losses[0],
+            height: item.losses[0],
+            name: 'HomeWins'
+        }, {
+            y: item.losses[0],
+            height: 0,
+            name: 'AwayWins'
+        }];
+        item.losses = [{
+            y: -(wins[1] + wins[0]),
+            height: -wins[0],
+            name: 'HomeLosses'
+        }, {
+            y: -wins[0],
+            height: 0,
+            name: 'AwayLosses'
+        }];
+    });
+
+    teams = _.sortBy(teams, function(team) {
+        return -(team.wins[0].y);
+    });
+
+    x.domain(teams.map(function(item) {
+        return item.name;
     }));
 
-    var range = d3.max(teams, function(team) {
-        return Math.max(team.wins[0].y, Math.abs(team.losses[0].y));
+    var range = d3.max(teams, function(item) {
+        return Math.max(item.wins[0].y, Math.abs(item.losses[0].y));
     });
 
     y.domain([-range, range]);
 
-    createGraph('Wins / Losses against ' + team);
+    createGraph('Wins / Losses of ' + team);
     renderGraph(teams, 'wins');
     renderGraph(teams, 'losses');
-    
+
+    svg.select('text').text("Wins and Losses of "+ team + " against each team");
 };
 
 View.country = function(country) {
@@ -188,27 +244,6 @@ function getOverviewTeams() {
                 name: item.AwayTeam
             }).losses[0]++;
         }
-    });
-
-    _.each(teams, function(team) {
-        team.wins = [{
-            y: team.wins[0] + team.wins[1],
-            height: team.wins[1],
-            name: 'HomeWins'
-        }, {
-            y: team.wins[1],
-            height: 0,
-            name: 'AwayWins'
-        }];
-        team.losses = [{
-            y: -(team.losses[0] + team.losses[1]),
-            height: -team.losses[1],
-            name: 'HomeLosses'
-        }, {
-            y: -team.losses[1],
-            height: 0,
-            name: 'AwayLosses'
-        }];
     });
 
     teams = _.sortBy(teams, function(team) {
@@ -383,7 +418,7 @@ function sliderChange() {
     currentView(viewArg);
 }
 
-function filterData(filterFun){
+function filterData(filterFun) {
     data = initialData.filter(function(item) {
         return item.Season >= minYear && item.Season <= maxYear && item.Round >= minRound && item.Round <= maxRound;
     });
